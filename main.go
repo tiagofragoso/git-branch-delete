@@ -13,6 +13,8 @@ import (
 
 const mergedOption = "--merged"
 const noMergedOption = "--no-merged"
+const remote = "origin"
+const defaultBranch = "master"
 
 type Branch struct {
 	Name    string
@@ -41,7 +43,9 @@ func gitBranch(merged bool) (branches []*Branch) {
 		option = noMergedOption
 	}
 
-	cmd := exec.Command("git", "branch", option)
+	commit := fmt.Sprintf("%s/%s", remote, defaultBranch)
+
+	cmd := exec.Command("git", "branch", option, commit)
 
 	output, err := cmd.Output()
 
@@ -77,7 +81,17 @@ func gitBranchDelete(branches []string) {
 	fmt.Printf("%s", string(output))
 }
 
+func gitFetch() {
+	cmd := exec.Command("git", "fetch", remote)
+
+	err := cmd.Run()
+	if err != nil {
+		log.Fatalf("Error while fetching %s: %v", remote, err)
+	}
+}
+
 func main() {
+	gitFetch()
 	var branches []*Branch
 	mergedBranches := gitBranch(true)
 	unmergedBranches := gitBranch(false)
@@ -108,6 +122,10 @@ func main() {
 		selected = append(selected, branches[i].Name)
 	}
 
-	gitBranchDelete(selected)
-	fmt.Printf("Deleted %d branches", len(selected))
+	if len(selected) > 0 {
+		gitBranchDelete(selected)
+		fmt.Printf("Deleted %d branches", len(selected))
+	} else {
+		fmt.Println("No branches selected")
+	}
 }
