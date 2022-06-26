@@ -2,57 +2,68 @@ package main
 
 import (
 	"fmt"
+	"math"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Based on https://github.com/charmbracelet/bubbletea/blob/master/examples/list-simple/main.go
+const NON_CONTENT_HEIGHT = 7
+
+// Based on https://github.com/charmbracelet/bubbletea/blob/master/tutorials/basics/README.md
 
 type model struct {
 	options  []string
 	cursor   int
+	offset   int
+	height   int
 	selected map[int]struct{}
 }
 
 func initialModel(options []string) model {
 	return model{
 		options:  options,
+		height:   math.MaxInt,
 		selected: make(map[int]struct{}),
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	// Just return `nil`, which means "no I/O right now, please."
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
-	// Is it a key press?
-	case tea.KeyMsg:
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
+		m.resetNavigation() // reset cursor and offset on resize
 
-		// Cool, what was the actual key pressed?
+	case tea.KeyMsg:
 		switch msg.String() {
 
-		// These keys should exit the program.
-		case "ctrl+c", "q":
+		case "d":
 			return m, tea.Quit
 
-		// The "up" and "k" keys move the cursor up
+		case "ctrl+c", "q":
+			m.selected = make(map[int]struct{}) // clear selection
+			return m, tea.Quit
+
 		case "up", "k":
 			if m.cursor > 0 {
+				if m.cursor == m.offset {
+					m.offset--
+				}
 				m.cursor--
 			}
 
-		// The "down" and "j" keys move the cursor down
 		case "down", "j":
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
+				if (m.cursor - m.offset) >= m.maxListSize() {
+					m.offset++
+				}
 			}
 
-		// The "enter" key and the spacebar (a literal space) toggle
-		// the selected state for the item that the cursor is pointing at.
 		case "enter", " ":
 			_, ok := m.selected[m.cursor]
 			if ok {
@@ -63,37 +74,52 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Return the updated model to the Bubble Tea runtime for processing.
-	// Note that we're not returning a command.
 	return m, nil
 }
 
 func (m model) View() string {
-	// The header
 	s := "What branches do you want to delete?\n\n"
 
-	// Iterate over our options
-	for i, choice := range m.options {
+	hiddenBefore := "\n"
+	if m.offset > 0 {
+		hiddenBefore = fmt.Sprintf("(↑ %d more item(s) hidden)\n", m.offset)
+	}
+	s += hiddenBefore
 
-		// Is the cursor pointing at this choice?
-		cursor := " " // no cursor
-		if m.cursor == i {
-			cursor = ">" // cursor!
+	upperBound := int(math.Min(float64(len(m.options)), float64(m.offset+m.maxListSize())))
+
+	for i, choice := range m.options[m.offset:upperBound] {
+		index := i + m.offset
+
+		cursor := " "
+		if m.cursor == index {
+			cursor = ">"
 		}
 
-		// Is this choice selected?
-		checked := " " // not selected
-		if _, ok := m.selected[i]; ok {
-			checked = "x" // selected!
+		checked := " "
+		if _, ok := m.selected[index]; ok {
+			checked = "x"
 		}
 
-		// Render the row
 		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
 	}
 
-	// The footer
-	s += "\nPress q to quit.\n"
+	hiddenAfter := "\n"
+	if upperBound < len(m.options) {
+		hiddenAfter = fmt.Sprintf("(↓ %d more item(s) hidden)\n", len(m.options)-upperBound)
+	}
+	s += hiddenAfter
 
-	// Send the UI for rendering
+	s += "\n↑/k move up; ↓/j mode down; enter/space select; d delete; q quit.\n"
+
 	return s
+}
+
+func (m model) maxListSize() int {
+	return m.height - NON_CONTENT_HEIGHT
+}
+
+func (m *model) resetNavigation() {
+	m.offset = 0
+	m.cursor = 0
 }
