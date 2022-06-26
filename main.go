@@ -53,6 +53,10 @@ func gitBranch(merged bool) (branches []*Branch) {
 		log.Fatalf("Error running git branch %s: %v", option, err)
 	}
 
+	if string(output) == "" {
+		return
+	}
+
 	trimmedString := strings.Trim(string(output), "\n")
 	trimmedString = strings.ReplaceAll(trimmedString, " ", "")
 	branchNames := strings.Split(trimmedString, "\n")
