@@ -111,7 +111,7 @@ func main() {
 	}
 
 	m := initialModel(options)
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(&m)
 	if err := p.Start(); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
