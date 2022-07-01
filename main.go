@@ -3,133 +3,74 @@ package main
 import (
 	"fmt"
 	"log"
-	"os/exec"
-	"regexp"
 	"sort"
-	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const mergedOption = "--merged"
-const noMergedOption = "--no-merged"
-const remote = "origin"
-const defaultBranch = "master"
-
-type Branch struct {
-	Name    string
-	Merged  bool
-	Current bool
-}
-
-func newBranch(name string, merged bool) *Branch {
-	return &Branch{
-		Name:    strings.ReplaceAll(name, "*", ""),
-		Merged:  merged,
-		Current: isCurrentBranch(name),
+func getBranches() (branches []*Branch) {
+	mutex := sync.Mutex{}
+	wg := sync.WaitGroup{}
+	for _, merged := range [2]bool{true, false} {
+		wg.Add(1)
+		go func(merged bool) {
+			defer wg.Done()
+			result := gitBranch(merged)
+			mutex.Lock()
+			branches = append(branches, result...)
+			mutex.Unlock()
+		}(merged)
 	}
-}
-
-func (b *Branch) print() string {
-	return fmt.Sprintf("%s (merged: %t)", b.Name, b.Merged)
-}
-
-func gitBranch(merged bool) (branches []*Branch) {
-	var option string
-
-	if merged {
-		option = mergedOption
-	} else {
-		option = noMergedOption
-	}
-
-	commit := fmt.Sprintf("%s/%s", remote, defaultBranch)
-
-	cmd := exec.Command("git", "branch", option, commit)
-
-	output, err := cmd.Output()
-
-	if err != nil {
-		log.Fatalf("Error running git branch %s: %v", option, err)
-	}
-
-	if string(output) == "" {
-		return
-	}
-
-	trimmedString := strings.Trim(string(output), "\n")
-	trimmedString = strings.ReplaceAll(trimmedString, " ", "")
-	branchNames := strings.Split(trimmedString, "\n")
-
-	for _, name := range branchNames {
-		branches = append(branches, newBranch(name, merged))
-	}
-
+	wg.Wait()
 	return
 }
 
-func isCurrentBranch(name string) bool {
-	re := regexp.MustCompile(`^\*\w+`)
-	return re.Match([]byte(name))
-}
-
-func gitBranchDelete(branches []string) {
-	args := []string{"branch", "-D"}
-	args = append(args, branches...)
-	cmd := exec.Command("git", args...)
-
-	output, err := cmd.Output()
-	if err != nil {
-		log.Fatalf("Error while deleting branches: %v", err)
-	}
-	fmt.Printf("%s", string(output))
-}
-
-func gitFetch() {
-	cmd := exec.Command("git", "fetch", remote)
-
-	err := cmd.Run()
-	if err != nil {
-		log.Fatalf("Error while fetching %s: %v", remote, err)
-	}
-}
-
-func main() {
-	gitFetch()
-	var branches []*Branch
-	mergedBranches := gitBranch(true)
-	unmergedBranches := gitBranch(false)
-	branches = append(branches, mergedBranches...)
-	branches = append(branches, unmergedBranches...)
+func sortBranches(branches []*Branch) {
 	sort.Slice(branches, func(i, j int) bool {
 		b1, b2 := branches[i], branches[j]
-		if b1.Current {
-			return true
+		if b1.Current != b2.Current {
+			return b1.Current // current branch first
+		} else if b1.Merged != b2.Merged {
+			return b1.Merged // merged branches second
 		}
-		return b1.Name < b2.Name
+		return b1.Name < b2.Name // sort alphabetically otherwise
 	})
+}
 
-	var options []string
-	for _, b := range branches {
-		options = append(options, b.print())
-	}
-
+func launchInterface(options []*Branch) *model {
 	m := initialModel(options)
 	p := tea.NewProgram(&m)
 	if err := p.Start(); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
+	return &m
+}
 
-	var selected []string
-
-	for i := range m.selected {
-		selected = append(selected, branches[i].Name)
+func getSelectedBranchNames(model *model) (selected []string) {
+	for i := range model.selected {
+		selected = append(selected, model.options[i].Name)
 	}
+	return
+}
 
+func deleteBranches(selected []string) {
 	if len(selected) > 0 {
-		gitBranchDelete(selected)
-		fmt.Printf("Deleted %d branches", len(selected))
+		output := gitBranchDelete(selected)
+		fmt.Printf("%s\nDeleted %d branches", output, len(selected))
 	} else {
 		fmt.Println("No branches selected")
 	}
+}
+
+func main() {
+	gitFetch()
+
+	branches := getBranches()
+	sortBranches(branches)
+
+	model := launchInterface(branches)
+	selected := getSelectedBranchNames(model)
+
+	deleteBranches(selected)
 }

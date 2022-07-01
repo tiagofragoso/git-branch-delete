@@ -12,14 +12,14 @@ const NON_CONTENT_HEIGHT = 7
 // Based on https://github.com/charmbracelet/bubbletea/blob/master/tutorials/basics/README.md
 
 type model struct {
-	options  []string
+	options  []*Branch
 	cursor   int
 	offset   int
 	height   int
 	selected map[int]struct{}
 }
 
-func initialModel(options []string) model {
+func initialModel(options []*Branch) model {
 	return model{
 		options:  options,
 		height:   math.MaxInt,
@@ -53,6 +53,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor == m.offset {
 					m.offset--
 				}
+			}
+			if m.cursor > 1 {
 				m.cursor--
 			}
 
@@ -101,7 +103,7 @@ func (m model) View() string {
 			checked = "x"
 		}
 
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice.print())
 	}
 
 	hiddenAfter := "\n"
@@ -121,5 +123,5 @@ func (m model) maxListSize() int {
 
 func (m *model) resetNavigation() {
 	m.offset = 0
-	m.cursor = 0
+	m.cursor = 1
 }
