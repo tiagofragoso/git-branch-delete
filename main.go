@@ -64,6 +64,7 @@ func deleteBranches(selected []string) {
 }
 
 func main() {
+	parseFlags()
 	gitFetch()
 
 	branches := getBranches()
