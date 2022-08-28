@@ -10,8 +10,6 @@ import (
 
 const mergedOption = "--merged"
 const noMergedOption = "--no-merged"
-const remote = "origin"
-const branch = "master"
 
 func gitBranch(merged bool) (branches []*Branch) {
 	option := noMergedOption
